@@ -1,93 +1,91 @@
 #!/bin/bash
 
+# Update and install dependencies
 apt update -y && apt upgrade -y
-
 apt install grub2 wimtools ntfs-3g -y
 
-#Get the disk size in GB and convert to MB
-disk_size_gb=$(parted /dev/sda --script print | awk '/^Disk \/dev\/sda:/ {print int($3)}')
-disk_size_mb=$((disk_size_gb * 1024))
+# Get disk size and convert to MB
+disk_size=$(lsblk -b -n -o SIZE /dev/sda | head -n 1)
+disk_size_mb=$((disk_size / 1024 / 1024))
 
-#Calculate partition size (25% of total size)
+# Calculate partition size (25% of total size)
 part_size_mb=$((disk_size_mb / 4))
 
-#Create GPT partition table
+# Create GPT partition table
 parted /dev/sda --script -- mklabel gpt
 
-#Create two partitions
-parted /dev/sda --script -- mkpart primary ntfs 1MB ${part_size_mb}MB
-parted /dev/sda --script -- mkpart primary ntfs ${part_size_mb}MB $((2 * part_size_mb))MB
+# Create two partitions
+parted /dev/sda --script -- mkpart primary ntfs 1MiB ${part_size_mb}MiB
+parted /dev/sda --script -- mkpart primary ntfs $((${part_size_mb} + 1))MiB $((${part_size_mb} * 2))MiB
 
-#Inform kernel of partition table changes
+# Inform kernel of partition changes
 partprobe /dev/sda
 
-sleep 30
-
-partprobe /dev/sda
-
-sleep 30
-
-partprobe /dev/sda
-
-sleep 30 
-
-#Format the partitions
+# Format the partitions
 mkfs.ntfs -f /dev/sda1
 mkfs.ntfs -f /dev/sda2
 
 echo "NTFS partitions created"
 
-echo -e "r\ng\np\nw\nY\n" | gdisk /dev/sda
-
+# Mount partitions
+mkdir -p /mnt /root/windisk
 mount /dev/sda1 /mnt
+mount /dev/sda2 /root/windisk
 
-#Prepare directory for the Windows disk
-cd ~
-mkdir windisk
+# Check available space
+available_space=$(df /mnt --output=avail | tail -1)
+if [ $available_space -lt 500000 ]; then
+    echo "Not enough space on /mnt"
+    exit 1
+fi
 
-mount /dev/sda2 windisk
-
+# Install GRUB
 grub-install --root-directory=/mnt /dev/sda
 
-#Edit GRUB configuration
-cd /mnt/boot/grub
-cat <<EOF > grub.cfg
-menuentry "windows installer" {
-	insmod ntfs
-	search --set=root --file=/bootmgr
-	ntldr /bootmgr
-	boot
+# Edit GRUB configuration
+mkdir -p /mnt/boot/grub
+cat <<EOF > /mnt/boot/grub/grub.cfg
+menuentry "Windows Installer" {
+    insmod ntfs
+    search --set=root --file=/bootmgr
+    ntldr /bootmgr
+    boot
 }
 EOF
 
-cd /root/windisk
+# Download Windows ISO
+wget -O /root/windisk/win10.iso "https://bit.ly/3UGzNcB"
+mkdir -p /root/windisk/winfile
+mount -o loop /root/windisk/win10.iso /root/windisk/winfile
 
-mkdir winfile
+# Verify ISO mount
+if [ ! -d "/root/windisk/winfile/sources" ]; then
+    echo "Failed to mount Windows ISO"
+    exit 1
+fi
 
-wget -O win10.iso --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36" https://bit.ly/3UGzNcB
+# Copy files
+rsync -avz --progress /root/windisk/winfile/* /mnt || { echo "File transfer failed"; exit 1; }
 
-mount -o loop win10.iso winfile
+# Unmount and prepare VirtIO
+umount /root/windisk/winfile
+wget -O /root/windisk/virtio.iso "https://bit.ly/4d1g7Ht"
+mount -o loop /root/windisk/virtio.iso /root/windisk/winfile
 
-rsync -avz --progress winfile/* /mnt
+mkdir -p /mnt/sources/virtio
+rsync -avz --progress /root/windisk/winfile/* /mnt/sources/virtio || { echo "VirtIO transfer failed"; exit 1; }
 
-umount winfile
-
-wget -O virtio.iso https://bit.ly/4d1g7Ht
-
-mount -o loop virtio.iso winfile
-
-mkdir /mnt/sources/virtio
-
-rsync -avz --progress winfile/* /mnt/sources/virtio
-
+# Update boot.wim
 cd /mnt/sources
+if [ -f "boot.wim" ]; then
+    echo 'add virtio /virtio_drivers' > cmd.txt
+    wimlib-imagex update boot.wim 2 < cmd.txt || { echo "Failed to update boot.wim"; exit 1; }
+else
+    echo "boot.wim not found"
+    exit 1
+fi
 
-touch cmd.txt
-
-echo 'add virtio /virtio_drivers' >> cmd.txt
-
-wimlib-imagex update boot.wim 2 < cmd.txt
-
+# Cleanup and reboot
+umount /mnt
+umount /root/windisk
 reboot
-
-
