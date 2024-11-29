@@ -54,7 +54,7 @@ menuentry "Windows Installer" {
 EOF
 
 # Download Windows ISO
-wget -O /root/windisk/win10.iso "https://bit.ly/3UGzNcB"
+wget -O /root/windisk/win10.iso "https://bit.ly/4i40x0h"
 mkdir -p /root/windisk/winfile
 mount -o loop /root/windisk/win10.iso /root/windisk/winfile
 
