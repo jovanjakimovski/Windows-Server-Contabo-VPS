@@ -68,7 +68,10 @@ cd /root/windisk
 mkdir winfile
 
 # Download the Windows 2022 ISO (Windows 10/11 ISO URL used for the example)
-wget -O win2022.iso --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36" "https://anonvids.com/win10.iso"
+#Win10    http://bit.ly/4fLnOSY
+#Win10-1  https://anonvids.com/win10.iso
+wget -O win2022.iso --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36" "http://bit.ly/4fLnOSY"
+
 
 # Mount the Windows ISO
 mount -o loop win2022.iso winfile
