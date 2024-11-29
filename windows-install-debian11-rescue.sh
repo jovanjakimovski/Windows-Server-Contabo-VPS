@@ -8,8 +8,8 @@ apt install grub2 wimtools ntfs-3g -y
 disk_size_gb=$(parted /dev/sda --script print | awk '/^Disk \/dev\/sda:/ {print int($3)}')
 disk_size_mb=$((disk_size_gb * 1024))
 
-#Calculate partition size (25% of total size)
-part_size_mb=$((disk_size_mb / 4))
+#Calculate partition size (50% of total size)
+part_size_mb=$((disk_size_mb / 2))
 
 #Create GPT partition table
 parted /dev/sda --script -- mklabel gpt
